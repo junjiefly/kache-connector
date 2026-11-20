@@ -1,4 +1,4 @@
-# 私有构建与生产部署说明
+# 部署构建与生产部署说明
 
 ## 1. 组件边界
 
@@ -6,14 +6,14 @@
 |---|---|---|
 | connector 核心 | 本仓库公开文件 | Go API、gRPC 客户端、协议校验、C ABI、Python ctypes 封装 |
 | Transport SPI | `transport/` | 数据面工厂和会话接口 |
-| 私有适配包 | 另行分发的 `private/` | 生产 RDMA/TCP 数据面工厂和生产 shlib 入口 |
-| 生产 shlib | `build/libkvcache.so` | 已注入私有数据面工厂的最终共享库 |
+| 部署集成包 | `private/` | 部署形态的 RDMA/TCP 数据面工厂和生产 shlib 入口 |
+| 生产 shlib | `build/libkvcache.so` | 已注入部署侧数据面工厂的最终共享库 |
 
-公开包不包含生产数据面适配器。直接使用公开 Go 库时，必须由使用方通过 `kvcache.WithFactories` 注入自己的工厂；直接使用公开 shlib 时，它只支持本地测试模式。
+部署适配器由部署集成包提供，并通过 `kvcache.WithFactories` 注入。直接使用 Go 库时，需要注入部署侧工厂；直接使用 shlib 时，它只支持本地测试模式。
 
 ## 2. 目录准备
 
-假设公开包已解压到 `kache-connector/`。获得私有适配包后，将私有适配包提供的 `private/` 目录放入同一根目录，并按私有适配包的 Go module `replace` 声明准备对应的私有数据面依赖目录。
+假设源码包已解压到 `kache-connector/`。将部署集成包提供的 `private/` 目录放入同一根目录，并按部署集成包的 Go module `replace` 声明准备对应的数据面依赖目录。
 
 典型最终结构如下：
 
@@ -30,7 +30,7 @@ kache-connector/
   go.sum
 ```
 
-不要把生产 shlib 或私有适配器单独复制到业务机器后随意替换公开 shlib 文件名。应使用私有适配包的构建入口生成最终 shlib。
+不要把生产 shlib 或部署适配器单独复制到业务机器后随意替换源码构建的 shlib 文件名。应使用部署集成包的构建入口生成最终 shlib。
 
 ## 3. 构建
 
@@ -43,14 +43,14 @@ CGO_ENABLED=1 go build -buildmode=c-shared \
   -o ../build/libkvcache.so ./cmd/kvc-shlib
 ```
 
-私有模块测试覆盖：
+部署模块测试覆盖：
 
 1. 生产 RDMA 工厂与 connector SPI 的适配；
 2. TCP fallback 工厂；
 3. 生产 shlib 入口注入的工厂；
 4. opaque ref 编解码和协议错误映射。
 
-Windows 构建使用私有模块中的入口时，同样需要启用 cgo 和对应的 RDMA/TCP 运行环境。
+Windows 构建使用部署模块中的入口时，同样需要启用 cgo 和对应的 RDMA/TCP 运行环境。
 
 ## 4. 运行时部署
 
@@ -140,7 +140,7 @@ export KVCACHE_LIBRARY=/opt/kache/libkvcache.so
 
 ## 6. 验收检查
 
-私有构建完成后按顺序验证：
+部署构建完成后按顺序验证：
 
 ```bash
 gofmt -w .
@@ -157,10 +157,10 @@ cd private && go test ./...
 5. RDMA 可用时数据节点收到 RDMA 传输；
 6. 停用 RDMA 后 fallback 到 TCP；
 7. 控制面 token 失败时返回 `PERMISSION_DENIED`；
-8. `KVCACHE_LIBRARY` 指向的是私有构建的 shlib。
+8. `KVCACHE_LIBRARY` 指向的是部署构建的 shlib。
 
 ## 7. 升级约束
 
-升级公开包和私有包时，必须保证协议版本和 `kache.v1` 消息字段编号一致。先在测试环境完成 Put/Get/Delete/fallback 回归，再升级生产。
+升级 connector 和部署集成包时，必须保证协议版本和 `kache.v1` 消息字段编号一致。先在测试环境完成 Put/Get/Delete/fallback 回归，再升级生产。
 
-禁止在业务进程内解析 `opaque_ref`。该字段只应由私有数据面适配器消费。
+禁止在业务进程内解析 `opaque_ref`。该字段只应由部署侧数据面适配器消费。

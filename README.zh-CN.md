@@ -1,15 +1,14 @@
 # Kache Connector
 
-这是推理进程使用的 KV Cache 连接器的开源核心实现。它提供：
+这是推理进程使用的 KV Cache 连接器。它提供：
 
 - Go 库和 `cgo` 共享库边界；
 - 简单的 Python 适配器；
 - 到 KacheControl 的 gRPC 控制面访问；
 - 通过公共 Transport SPI 注入的数据面访问能力。
 
-生产环境使用的 RDMA/TCP 数据面适配器不在开源仓库中。私有构建会通过
-`kvcache.WithFactories` 注入这些适配器。开源连接器始终把服务端返回的物理
-block 引用视为不透明字节，不会解析内部存储布局。
+数据面适配器按部署形态选择，并通过 `kvcache.WithFactories` 注入。连接器始终
+把服务端返回的物理 block 引用视为不透明字节，不会解析内部存储布局。
 
 ## 快速开始
 
@@ -33,12 +32,12 @@ smoke OK: put/get/miss/delete passed
 
 - **控制面**：连接器通过 gRPC/TCP 访问 KacheControl，完成鉴权、key 匹配、
   block 计划获取、commit/abort 和删除。
-- **数据面**：连接器使用服务端返回的 block 计划直连数据节点。开源包只定义
-  Transport SPI，不包含生产 RDMA/TCP 工厂。
+- **数据面**：连接器使用服务端返回的 block 计划直连数据节点。Transport SPI
+  支持按部署形态注入 RDMA/TCP 工厂。
 - **chunk**：KV Cache 的最小业务单元。每个 chunk 是一个不可变对象。
 - **namespace**：连接器的逻辑命名空间，从配置中读取，Python API 不显式传入。
 
-完整配置、API、错误码和私有构建说明见
+完整配置、API、错误码和部署构建说明见
 [`docs/USAGE.zh-CN.md`](docs/USAGE.zh-CN.md) 和
 [`docs/PRIVATE_BUILD.zh-CN.md`](docs/PRIVATE_BUILD.zh-CN.md)。
 
@@ -89,12 +88,12 @@ with KVCacheConnector.from_config(config) as conn:
 常用命令：
 
 ```bash
-make test     # gofmt 检查、开源核心 Go 构建/测试
+make test     # gofmt 检查、Go 构建/测试
 make smoke    # 本地 put/get/miss/delete 端到端测试
 make race     # Go race 测试
 ```
 
-私有适配器和生产 shlib 构建方式：
+部署适配器和生产 shlib 构建方式：
 
 ```bash
 cd private
@@ -111,23 +110,22 @@ transport/             公共数据面 Transport SPI
 internal/controlclient/  KacheControl gRPC 客户端
 internal/dataplane/      与传输无关的数据面编排
 internal/testserver/     本地测试控制面和 fake data plane
-cmd/kvc-shlib/           开源 cgo 共享库入口
+cmd/kvc-shlib/           cgo 共享库入口
 cmd/kvc-smoke/           本地端到端 smoke 命令
 sdk/python/              Python ctypes 适配器
 examples/                最小可运行示例
-private/                 私有生产适配器和私有 shlib 构建模块，不随开源包发布
+private/                 部署集成模块，包含部署数据面适配器和生产 shlib 入口
 ```
 
-## 开源边界
+## 集成边界
 
-开源连接器不包含：
+连接器核心不实现：
 
-- 生产 RDMA/TCP 数据面适配器；
-- 私有数据面依赖及其后端协议；
-- 内部 block 布局、ref 编码和 wire protocol；
-- 服务端和存储后端的实现。
+- 存储后端、块分配、放置和垃圾回收；
+- 服务端实现；
+- 面向内部存储布局的业务逻辑。
 
-公开边界以本仓库的 Go API、protobuf 协议、C ABI 和示例为准。
+集成边界以本仓库的 Go API、protobuf 协议、C ABI、Transport SPI 和示例为准。
 
 ## 许可
 

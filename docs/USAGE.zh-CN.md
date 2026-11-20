@@ -9,7 +9,7 @@
 3. 通过注入的数据面工厂直连数据节点；
 4. 校验 chunk、batch、计划、payload 长度和内容哈希。
 
-开源仓库包含 connector 核心、协议、C ABI、Python ctypes 适配器和本地测试双端。生产 RDMA/TCP 数据面工厂不在开源包内，由私有构建注入。
+本项目包含 connector 核心、协议、C ABI、Python ctypes 适配器和本地测试双端。RDMA/TCP 数据面工厂在部署阶段注入。
 
 ## 2. 快速开始
 
@@ -34,7 +34,7 @@ KVCACHE_LIBRARY=$PWD/build/libkvcache.so \
 python examples/python/basic.py --config-file /tmp/kvc.json
 ```
 
-注意：公开仓库的 shlib 只在 `insecure_test_mode=true` 且控制面 endpoint 是 loopback 时注入本地 TCP 测试工厂。生产部署必须使用私有构建生成的 shlib。
+注意：shlib 只在 `insecure_test_mode=true` 且控制面 endpoint 是 loopback 时注入本地 TCP 测试工厂。生产部署应使用部署集成构建生成的 shlib。
 
 ## 3. Go API
 
@@ -91,13 +91,13 @@ func main() error {
 }
 ```
 
-`productionFactories()` 来自私有数据面适配器，通过 `kvcache.WithFactories` 注入：
+`productionFactories()` 来自定义的部署侧数据面适配器，通过 `kvcache.WithFactories` 注入：
 
 ```go
 conn, err := kvcache.New(ctx, cfg, kvcache.WithFactories(rdmaFactory, tcpFactory))
 ```
 
-公开核心不提供生产工厂。没有注入工厂时，`kvcache.New` 返回 `TRANSPORT_UNAVAILABLE`。
+没有注入工厂时，`kvcache.New` 返回 `TRANSPORT_UNAVAILABLE`。
 
 ## 4. Python API
 
@@ -205,9 +205,9 @@ Python `KVChunk` 当前不暴露 `ttl_seconds` 字段。需要自定义 TTL 时�
 | `control_plane.caps_refresh_seconds` | 60 | 服务端能力缓存刷新间隔。 |
 | `transport.mode` | `auto` | `rdma`、`tcp` 或 `auto`。 |
 | `transport.fallback_enabled` | true | RDMA 目标失败且提供 TCP fallback endpoint 时切换 TCP。 |
-| `transport.rdma.dial_timeout_ms` | 2000 | 私有 RDMA 工厂建立数据面连接的超时。 |
-| `transport.rdma.pool_size_bytes` | 256 MiB | 私有 RDMA 数据面缓冲池预算。 |
-| `transport.rdma.max_outstanding` | 32 | 私有 RDMA 数据面最大在途请求数。 |
+| `transport.rdma.dial_timeout_ms` | 2000 | RDMA 工厂建立数据面连接的超时。 |
+| `transport.rdma.pool_size_bytes` | 256 MiB | RDMA 数据面缓冲池预算。 |
+| `transport.rdma.max_outstanding` | 32 | RDMA 数据面最大在途请求数。 |
 | `transport.tcp.dial_timeout_ms` | 2000 | TCP 数据面连接超时。 |
 | `limits.max_chunk_bytes` | 64 MiB | 本地 chunk 上限。 |
 | `limits.max_batch_chunks` | 64 | 本地 batch chunk 数上限。 |
@@ -298,7 +298,7 @@ C ABI 返回码与 Python 异常映射：
 
 ## 9. 构建和测试
 
-公开核心：
+构建和测试：
 
 ```bash
 gofmt -w .

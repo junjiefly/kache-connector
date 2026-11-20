@@ -1,7 +1,7 @@
 # Kache Connector
 
 This repository implements the client-side KV Cache connector used by inference
-processes. The open-source repository name is `kache-connector`.
+processes. The repository name is `kache-connector`.
 
 The connector exposes:
 
@@ -10,20 +10,22 @@ The connector exposes:
 - gRPC control-plane calls to KacheControl;
 - direct data-plane writes and reads through the public Transport SPI.
 
-The open-source module deliberately does not include the production RDMA/TCP
-data-plane adapter. Those adapters depend on the private backend integration and
-are injected by the private build with `kvcache.WithFactories`.
+Data-plane adapters are selected for the deployment and injected at runtime with
+`kvcache.WithFactories`. The connector always treats server-returned physical
+block references as opaque bytes and never decodes the internal storage layout.
 
-KacheControl is not implemented here. This repository contains the connector plus test doubles required for local verification.
+This repository contains the connector plus local test doubles required for
+verification.
 
 ## Implementation boundary
 
 The implementing agent must follow these constraints:
 
-1. Keep private backend adapters outside the public connector module.
+1. Keep storage-specific adapters outside the connector core.
 2. Treat backend block references as opaque bytes.
 3. Do not implement backend storage, allocation, GC, or placement logic in this repository.
-4. The root module must not import or depend on a private data-plane backend. It defines the Transport SPI only.
+4. The root module must not import or depend on a backend-specific data-plane
+   implementation. It defines the Transport SPI only.
 
 Chinese documentation is in [`README.zh-CN.md`](README.zh-CN.md),
 [`docs/USAGE.zh-CN.md`](docs/USAGE.zh-CN.md), and
@@ -49,8 +51,8 @@ proto/kache/v1/       kache.proto + generated Go bindings (checked in)
 proto/gen/python/     generated Python bindings (checked in)
 tools/generate_proto.py  protoc wrapper
 test/integration/     end-to-end Go tests against the local test doubles
-private/              nested private build module (private data-plane adapters and
-                      production shlib entry point; not part of open-source core)
+private/              deployment integration module (deployment data-plane
+                      adapters and production shlib entry point)
 ```
 
 ## Build and test
@@ -65,7 +67,7 @@ make smoke    # end-to-end put/get/miss/delete against the local test doubles
 make race     # go test -race ./...
 ```
 
-Private adapter tests and the production shlib are built from `private`:
+Deployment adapter tests and the production shlib are built from `private`:
 
 ```bash
 cd private
@@ -74,16 +76,15 @@ CGO_ENABLED=1 go build -buildmode=c-shared \
   -o ../build/libkvcache.so ./cmd/kvc-shlib
 ```
 
-RDMA integration tests belong to the private build; the open-source tests use
-the fake data plane and never import a private data-plane backend.
+RDMA integration tests are part of the deployment integration build; connector
+tests use the fake data plane and do not import backend-specific adapters.
 
 ### Control plane versus data plane
 
-The open-source connector always talks to KacheControl over gRPC/TCP.
-RDMA is a data-plane capability, not a control-plane protocol. After the private
-RDMA adapter is injected, it uses opaque server-returned refs to read/write
-storage nodes directly. Control-plane traffic never uses the private RDMA data
-plane.
+The connector always talks to KacheControl over gRPC/TCP.
+RDMA is a data-plane capability, not a control-plane protocol. After an RDMA
+adapter is injected, it uses opaque server-returned refs to read/write storage
+nodes directly. Control-plane traffic never uses the RDMA data plane.
 
 ## Python adapter
 
@@ -130,19 +131,19 @@ and misses are encoded in the protobuf reply, not the return code.
 
 ## Implementation notes
 
-- **Private transport adapters**: the root module contains no default RDMA/TCP
-  factory. `kvcache.New` returns `TRANSPORT_UNAVAILABLE` without injection. The
-  private module provides private RDMA/TCP adapters and the production shlib
-  entry point. The connector core never decodes backend block references.
+- **Pluggable transport adapters**: the root module contains no default RDMA/TCP
+  factory. `kvcache.New` returns `TRANSPORT_UNAVAILABLE` without injection.
+  Deployment integration modules provide deployment-specific RDMA/TCP adapters
+  and the production shlib entry point. The connector core never decodes backend
+  block references.
 - **Empty request namespace**: the Python API has no namespace parameter, so
   batch requests arrive with an empty `namespace`. The connector fills it with
   the configured namespace before calling the server; a non-empty namespace
   that differs from the configured one is rejected with `INVALID_ARGUMENT`.
 - **RDMA pool knobs**: `transport.rdma.pool_size_bytes` and
-  `transport.rdma.max_outstanding` are consumed by the private RDMA factory.
-  The open-source core does not have a production RDMA backend, so they are
-  parsed and validated in the public package but only take effect after the
-  private factories are injected. In-flight connector bytes remain bounded by
+  `transport.rdma.max_outstanding` are consumed by the deployed RDMA factory.
+  They are parsed and validated by the connector and take effect after the
+  factories are injected. In-flight connector bytes remain bounded by
   `limits.max_inflight_bytes`.
 - **Invalid ReadPlan error code**: the implementation returns
   `INVALID_READ_PLAN` when a server-provided data-plane plan fails local
