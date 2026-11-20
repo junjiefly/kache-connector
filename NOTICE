@@ -1,0 +1,14 @@
+KacheConnector
+Copyright (c) 2026 KacheConnector Contributors
+
+This product includes third-party software governed by the licenses listed
+below. The respective license texts are available from each project.
+
+* github.com/golang/protobuf: BSD 3-Clause License
+* golang.org/x/sync: BSD 3-Clause License
+* google.golang.org/grpc: Apache License 2.0
+* google.golang.org/protobuf: BSD 3-Clause License
+
+Production RDMA/TCP transport adapters are not part of this public connector
+package. They are injected through the public Transport SPI by a private
+integration build.

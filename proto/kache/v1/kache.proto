@@ -1,0 +1,243 @@
+syntax = "proto3";
+
+package kache.v1;
+
+option go_package = "github.com/junjiefly/kache-connector/proto/kache/v1;kachev1";
+
+service KacheControl {
+  rpc GetCaps(GetCapsRequest) returns (GetCapsReply);
+  rpc MatchBatch(MatchBatchRequest) returns (MatchBatchReply);
+  rpc ResolveBatch(ResolveBatchRequest) returns (ResolveBatchReply);
+  rpc PreparePutBatch(PreparePutBatchRequest) returns (PreparePutBatchReply);
+  rpc CommitPutBatch(CommitPutBatchRequest) returns (CommitPutBatchReply);
+  rpc AbortPutBatch(AbortPutBatchRequest) returns (AbortPutBatchReply);
+  rpc DeleteBatch(DeleteBatchRequest) returns (DeleteBatchReply);
+  rpc ListControlServers(ListControlServersRequest) returns (ListControlServersReply);
+}
+
+enum BlockKind {
+  BLOCK_KIND_UNSPECIFIED = 0;
+  BLOCK_KIND_REGULAR = 1;
+  BLOCK_KIND_NORMAL = 2;
+  BLOCK_KIND_DESC = 3;
+}
+
+message GetCapsRequest { string namespace = 1; }
+
+message GetCapsReply {
+  uint32 protocol_version = 1;
+  string namespace = 2;
+  uint32 pool_id = 3;
+  uint32 replica_count = 4;
+  uint32 regular_block_size = 5;
+  uint32 max_wire_block_bytes = 6;
+  uint64 max_chunk_bytes = 7;
+  uint32 max_batch_chunks = 8;
+  uint64 max_batch_bytes = 9;
+  uint32 max_blocks_per_batch = 10;
+  uint32 max_concurrent_blocks = 11;
+  repeated string supported_transports = 12;
+  bool transport_fallback_enabled = 13;
+  bool dedup_enabled = 14;
+  int64 default_ttl_seconds = 15;
+  int64 max_ttl_seconds = 16;
+  int64 request_index_ttl_seconds = 17 [deprecated = true];
+}
+
+message DataTarget {
+  string target_id = 1;
+  string endpoint = 2;
+  string fallback_endpoint = 3;
+  bytes capability = 4;
+  string transport = 5;
+  map<string, string> hints = 6;
+  bytes opaque_ref = 7;
+}
+
+message PhysicalBlock {
+  string plan_block_id = 1;
+  BlockKind kind = 2;
+  uint32 chunk_index = 3;
+  uint64 chunk_offset = 4;
+  uint32 logical_len = 5;
+  uint32 wire_len = 6;
+  string ref_kind = 7;
+  bytes opaque_ref = 8;
+  repeated DataTarget targets = 9;
+  bytes payload = 10;
+}
+
+// Connector-public batch DTOs. They are in-process API types; the control
+// plane never sees chunk payloads.
+message PutChunk {
+  string key = 1;
+  bytes data = 2;
+  uint64 size_bytes = 3;
+  bytes content_hash = 4;
+  map<string, string> attributes = 5;
+  uint64 ttl_seconds = 6;
+}
+
+message PutBatchRequest {
+  string namespace = 1;
+  string client_request_id = 2;
+  repeated PutChunk chunks = 3;
+  map<string, string> hints = 4;
+}
+
+message PutResult {
+  string key = 1;
+  bool ok = 2;
+  string error_code = 3;
+  string message = 4;
+}
+
+message PutBatchReply {
+  bool committed = 1;
+  string put_id = 2;
+  repeated PutResult results = 3;
+}
+
+message GetBatchRequest {
+  string namespace = 1;
+  repeated string keys = 2;
+  map<string, string> hints = 3;
+}
+
+message GetResult {
+  string key = 1;
+  bool hit = 2;
+  uint64 size_bytes = 3;
+  bytes content_hash = 4;
+  map<string, string> attributes = 5;
+  string error_code = 6;
+  string message = 7;
+  bytes data = 8;
+  int64 last_modified_unix_sec = 9;
+}
+
+message GetBatchReply {
+  repeated GetResult results = 1;
+}
+
+message PutChunkMeta {
+  string key = 1;
+  uint64 size_bytes = 2;
+  bytes content_hash = 3;
+  map<string, string> attributes = 4;
+  uint64 ttl_seconds = 5;
+}
+
+message PreparePutBatchRequest {
+  string namespace = 1;
+  string client_request_id = 2;
+  repeated PutChunkMeta chunks = 3;
+  map<string, string> hints = 4;
+}
+
+message PutError {
+  uint32 chunk_index = 1;
+  string code = 2;
+  string message = 3;
+}
+
+message PreparePutBatchReply {
+  bool accepted = 1;
+  string put_id = 2;
+  repeated PhysicalBlock blocks = 3;
+  repeated PutError errors = 4;
+  int64 expires_at_unix_sec = 5;
+}
+
+message TargetWriteResult {
+  string target_id = 1;
+  string endpoint = 2;
+  bool ok = 3;
+  string error_code = 4;
+  uint32 bytes_written = 5;
+}
+
+message BlockWriteResult {
+  string plan_block_id = 1;
+  repeated TargetWriteResult results = 2;
+}
+
+message CommitPutBatchRequest {
+  string namespace = 1;
+  string put_id = 2;
+  repeated BlockWriteResult results = 3;
+}
+
+message CommitPutBatchReply {
+  bool committed = 1;
+  repeated PutError errors = 2;
+  repeated string keys = 3;
+}
+
+message AbortPutBatchRequest {
+  string namespace = 1;
+  string put_id = 2;
+  string reason = 3;
+}
+
+message AbortPutBatchReply { bool aborted = 1; }
+
+message MatchBatchRequest {
+  string namespace = 1;
+  repeated string keys = 2;
+  map<string, string> hints = 3;
+}
+
+message MatchResult {
+  string key = 1;
+  bool hit = 2;
+  string error_code = 3;
+  map<string, string> attributes = 4;
+}
+
+message MatchBatchReply { repeated MatchResult results = 1; }
+
+message ResolveBatchRequest {
+  string namespace = 1;
+  repeated string keys = 2;
+  map<string, string> hints = 3;
+}
+
+message ReadPlan {
+  string key = 1;
+  uint64 size_bytes = 2;
+  bytes content_hash = 3;
+  map<string, string> attributes = 4;
+  int64 expires_at_unix_sec = 5;
+  repeated PhysicalBlock blocks = 6;
+  int64 last_modified_unix_sec = 7;
+}
+
+message ResolveBatchReply {
+  repeated ReadPlan plans = 1;
+  repeated MatchResult misses = 2;
+}
+
+message DeleteBatchRequest {
+  string namespace = 1;
+  repeated string keys = 2;
+  bool force = 3;
+}
+
+message DeleteResult {
+  string key = 1;
+  bool deleted = 2;
+  string error_code = 3;
+}
+
+message DeleteBatchReply { repeated DeleteResult results = 1; }
+
+message ControlServer {
+  string advertise_addr = 1;
+  string state = 2;
+  int64 last_heartbeat_unix_sec = 3;
+}
+
+message ListControlServersRequest { string namespace = 1; }
+
+message ListControlServersReply { repeated ControlServer servers = 1; }

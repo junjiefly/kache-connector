@@ -1,0 +1,10 @@
+build/
+*.exe
+*.dll
+*.so
+*.tgz
+*.tar.gz
+*.py[cod]
+__pycache__/
+.pytest_cache/
+.DS_Store
