@@ -128,3 +128,7 @@ private/                 私有生产适配器和私有 shlib 构建模块，不
 - 服务端和存储后端的实现。
 
 公开边界以本仓库的 Go API、protobuf 协议、C ABI 和示例为准。
+
+## 许可
+
+本项目基于 Apache License 2.0 开源。详见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。

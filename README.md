@@ -156,3 +156,7 @@ and misses are encoded in the protobuf reply, not the return code.
   Python bindings are generated under `proto/gen/python`. Both are checked in;
   `tools/generate_proto.py` reproduces them. Set `KACHE_PROTOC_DIR` to the
   directory containing the approved Linux protoc and plugins.
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
